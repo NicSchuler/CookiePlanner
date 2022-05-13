@@ -1,0 +1,142 @@
+# This is the server logic of a Shiny web application. 
+
+# load packages----
+library(shiny)
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(R.utils)
+library(shinythemes)
+library(DT)
+
+# define own functions----
+
+# Function that loads the ingredients and recipes tables from the input excel and processes them
+load_input_excel <- function(file="Input_Excel.xlsx"){
+  # read the ingredients table
+  ingredients_tbl <- read_excel(path=file, sheet="Ingredients") %>% 
+    select(Number, Ingredient, Measure, App_Qty_Input, Ingr_full_name) %>% 
+    filter(!is.na(Ingredient))
+  
+  ingr <- ingredients_tbl$Ingr_full_name
+  
+  # read the recipes table
+  recipes_tbl <- read_excel(path=file, sheet="Recipes") %>% 
+    select(c("Number", "Recipe", "Comment", all_of(ingr))) %>% 
+    filter(!is.na(Recipe)) %>% 
+    mutate_at(c(4:(length(ingr)+3)), ~replace(., is.na(.), 0))
+  
+  # combine ingredients and recipes table to a list and return the list
+  data <- list(ingredients=ingredients_tbl, recipes=recipes_tbl)
+  
+  return(data)
+}
+
+# function that initializes the quantity input table (bottom left in the app), given the recipes and ingredients from the input excel
+create_qty_input_table <- function(data=loaded_data){
+  # create vector with all ingredients for which it is possible to enter the quantity
+  ingr_to_incl <- (data$ingredients %>% filter(App_Qty_Input == "Yes"))$Ingr_full_name
+  
+  # default values: Simple Multiplier = 1, input ingredients = 0
+  qty_input_table <- data$recipes %>% select(Recipe)
+  qty_input_table[,"Simple Multiplier"] <- 1
+  for(ingr in ingr_to_incl){
+    qty_input_table[,ingr] <- 0
+  }
+  
+  return(qty_input_table)
+  
+}
+
+# function that computes a table with the multipliers and required ingredients based on the quantity input table and the loaded excel
+derive_qty_output_table <- function(qty_input, data=loaded_data){
+  # create vectors with all input ingredients and all ingredients
+  inp_ingr=(data$ingredients %>% filter(App_Qty_Input=="Yes"))$Ingr_full_name
+  all_ingr=data$ingredients$Ingr_full_name
+  
+  # derive the multiplier per recipe based on the input table
+  multipliers <- qty_input %>%
+    mutate(negs=rowSums(.<0, na.rm=TRUE)) %>% 
+    filter(negs==0) %>% 
+    mutate(counter=rowSums(.!=0&.!=""&!is.na(.))-1) %>% 
+    filter(counter==1) %>% 
+    pivot_longer(cols=c(all_of(inp_ingr), "Simple Multiplier"), names_to = "ingr", values_to = "val_inp") %>% 
+    filter(val_inp!=0&val_inp!="") %>% 
+    left_join((data$recipes %>% 
+                 mutate("Simple Multiplier"=1) %>%
+                 select(c(Recipe, "Simple Multiplier", all_of(inp_ingr))) %>% 
+                 pivot_longer(cols=c(all_of(inp_ingr), "Simple Multiplier"), names_to = "ingr", values_to = "val_rec")),
+              by=c("Recipe", "ingr")) %>% 
+    mutate(Multiplier=val_inp/val_rec) %>% 
+    select(Recipe, Multiplier)
+  
+  # scale all ingredients for all recipes based on the multiplier
+  out <- data$recipes %>% 
+    left_join(multipliers, by="Recipe") %>% 
+    mutate(Multiplier=replace_na(Multiplier,0)) %>% 
+    select(all_of(all_ingr), Multiplier) %>% 
+    mutate(across(all_of(all_ingr), ~ round(.* Multiplier,2))) %>% 
+    mutate(Multiplier=round(Multiplier,2))
+  
+  return(out)
+}
+
+# function that creates the total quantity per ingredient given the required quantities per recipe
+derive_totals_table <- function(qty_output_table){
+  out <- qty_output_table %>% 
+    select(-c(Multiplier)) %>% 
+    summarize_all(sum)
+  
+  return(out)
+}
+
+# Server----
+shinyServer(function(input, output) {
+  # 1. Load input page----
+  # process uploaded data when load button is pressed
+  loaded_data <- eventReactive(input$load_excel, {
+    inFile <- input$excel
+    load_input_excel(file=inFile$datapath)})
+  
+  # Give info whether loading data was successful
+  output$load_info <- renderText({tryCatch({suppressWarnings(paste("You have successfully loaded ", nrow(loaded_data()$recipes), " recipes with ", nrow(loaded_data()$ingredients), " different ingredients.", sep=""))}, error=function(cond){return("No data loaded.")})})
+  
+  # 2. Plan cookies page----
+  # initialize reactive value for the quantity input table
+  qty <- reactiveValues(x=NULL)
+  
+  # initialize quantity input table based on loaded data
+  observe({qty$x <- create_qty_input_table(data=loaded_data())})
+  
+  # update quantity input table internally after it has been edited
+  observeEvent(input$qty_input_cell_edit, {
+    qty$x <<- editData(qty$x, input$qty_input_cell_edit, 'qty_input', rownames = FALSE)
+  })
+  
+  # calculate multipliers and required quantities per recipe based on quantity input table
+  qty_output_table <- reactive({derive_qty_output_table(qty_input = qty$x, data=loaded_data())})
+  
+  # calculate totals table based on required quantities per recipe
+  totals_table <- reactive({derive_totals_table(qty_output_table = qty_output_table())})
+  
+  # render quantity input table
+  output$qty_input <- renderDT(if(is.null(qty$x)){datatable(data.frame(Input="No data loaded"), rownames=FALSE, options = list(dom='t',ordering=F), selection = 'none')}
+                               else{tryCatch({datatable(qty$x, rownames=FALSE, editable=list(target = 'cell', disable = list(columns = c(0))),
+                                                        options = list(dom='t',ordering=F,escape=F, pageLength=nrow(loaded_data()$recipes)), selection = 'none')},
+                                             error=function(cond){return(datatable(data.frame(Input="No data loaded"), rownames=FALSE, options = list(dom='t',ordering=F), selection = 'none'))})})
+  
+  # render multiplier table
+  output$multiplier_output <- renderDT({tryCatch({datatable(qty_output_table() %>% select(Multiplier), rownames=FALSE, editable=FALSE,
+                                                            options = list(dom='t',ordering=F, pageLength=nrow(loaded_data()$recipes)), selection = 'none')},
+                                                 error=function(cond){return(datatable(data.frame(Multipliers="No data loaded"), rownames=FALSE, options = list(dom='t',ordering=F), selection = 'none'))})})
+  
+  # render quantity required per recipe table
+  output$qty_output <- renderDT({tryCatch({datatable(qty_output_table() %>% select(-Multiplier), rownames=FALSE, editable=FALSE,
+                                                     options = list(dom='t',ordering=F, pageLength=nrow(loaded_data()$recipes)), selection = 'none')},
+                                          error=function(cond){return(datatable(data.frame(Output="No data loaded"), rownames=FALSE, options = list(dom='t',ordering=F), selection = 'none'))})})
+  
+  # render totals table (per ingredient)
+  output$totals_output <- renderDT({tryCatch({datatable(totals_table(), rownames=FALSE, editable=FALSE, options = list(dom='t',ordering=F, pageLength=1), selection = 'none')},
+                                             error=function(cond){return(datatable(data.frame(Totals="No data loaded"), rownames=FALSE, options = list(dom='t',ordering=F), selection = 'none'))})})
+  
+})
