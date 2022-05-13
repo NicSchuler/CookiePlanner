@@ -16,8 +16,6 @@ shinyUI(fluidPage(theme=shinytheme("yeti"), #setBackgroundColor(color="grey"),
                                       
                                       h1("Upload Recipes"),
                                       br(),
-                                      HTML("<p>Please use the template provided under <a href='https://github.com/NicSchuler'>this link</a>. You will also find some explanations to the functionalities in this app there.</p>"),
-                                      br(),
                                       
                                       sidebarLayout(
                                       
@@ -30,7 +28,7 @@ shinyUI(fluidPage(theme=shinytheme("yeti"), #setBackgroundColor(color="grey"),
                                       textOutput("load_info")),
                                       
                                       # main panel
-                                      mainPanel(p("Description to be included."))
+                                      mainPanel(HTML("<p>Please use the template provided on <a href='https://github.com/NicSchuler/CookiePlanner'>Github</a>. You will also find some explanations to the functionalities in this app there.</p>"))
                                       
                              )),
                              
@@ -39,10 +37,11 @@ shinyUI(fluidPage(theme=shinytheme("yeti"), #setBackgroundColor(color="grey"),
                                       
                                       h1("Plan your cookie production"),
                                       br(),
-                                      p("To plan your cookie production, please use the input panel below. You can either enter the number of recipes of one type (column 'Simple Multiplier') or by specifying the amount of one specific ingredient (only those that have App_Qty_Input = 'Yes')."),
-                                      br(),
-                                      splitLayout(cellWidths = c("45%", "55%"),
-                                                  p(""),
+                                      splitLayout(cellWidths = c("45%", "55%"), cellArgs = list(style='white-space: normal;'),
+                                                  p("To plan your cookie production, please use the input panel below.
+                                                    You can either enter the multiplier directly (column 'Simple Multiplier') or specify the amount of one specific ingredient (only those that have App_Qty_Input = 'Yes').
+                                                    Please be aware that only one non-zero or non-empty value is allowed per row.
+                                                    To edit a cell you will need to double-click it."),
                                                   panel(
                                                     p(strong("Total Ingredients required")),
                                                     DTOutput(outputId = "totals_output")
