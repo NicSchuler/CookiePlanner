@@ -3,3 +3,5 @@
 Dev/
 .Rproj.user
 App/rsconnect/
+.gitattributes
+.gitignore
