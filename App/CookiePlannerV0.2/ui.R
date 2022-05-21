@@ -56,7 +56,11 @@ shinyUI(fluidPage(theme=shinytheme("yeti"), #setBackgroundColor(color="grey"),
                                               DTOutput(outputId = "multiplier_output")),
                                         panel(p(strong("Output")),
                                               DTOutput(outputId = "qty_output"))
-                             ))
+                                      ),
+                                      fluidRow(column(width=3, offset=9,
+                                                  panel(p(strong("Download Results")),
+                                                        downloadButton("download_planned_cookies", "Download"))))
+                             )
                              
                   )
 ))

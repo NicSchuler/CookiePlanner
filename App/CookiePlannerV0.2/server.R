@@ -8,6 +8,7 @@ library(tidyr)
 library(R.utils)
 library(shinythemes)
 library(DT)
+library(writexl)
 
 # define own functions----
 
@@ -98,7 +99,7 @@ derive_qty_output_table <- function(qty_input, data=loaded_data){
   out <- data$recipes %>% 
     left_join(multipliers, by="Recipe") %>% 
     mutate(Multiplier=replace_na(Multiplier,0)) %>% 
-    select(all_of(all_ingr), Multiplier) %>% 
+    select(Recipe, all_of(all_ingr), Multiplier) %>% 
     mutate(across(all_of(all_ingr), ~ round(.* Multiplier,2))) %>% 
     mutate(Multiplier=round(Multiplier,2))
   
@@ -142,7 +143,7 @@ shinyServer(function(input, output) {
   qty_output_table <- reactive({derive_qty_output_table(qty_input = qty$x, data=loaded_data())})
   
   # calculate totals table based on required quantities per recipe
-  totals_table <- reactive({derive_totals_table(qty_output_table = qty_output_table())})
+  totals_table <- reactive({derive_totals_table(qty_output_table = qty_output_table() %>% select(-Recipe))})
   
   # render quantity input table
   output$qty_input <- renderDT(if(is.null(qty$x)){datatable(data.frame(Input="No data loaded"), rownames=FALSE, options = list(dom='t',ordering=F), selection = 'none')}
@@ -156,7 +157,7 @@ shinyServer(function(input, output) {
                                                  error=function(cond){return(datatable(data.frame(Multipliers="No data loaded"), rownames=FALSE, options = list(dom='t',ordering=F), selection = 'none'))})})
   
   # render quantity required per recipe table
-  output$qty_output <- renderDT({tryCatch({datatable(qty_output_table() %>% select(-Multiplier), rownames=FALSE, editable=FALSE,
+  output$qty_output <- renderDT({tryCatch({datatable(qty_output_table() %>% select(-Multiplier) %>% select(-Recipe), rownames=FALSE, editable=FALSE,
                                                      options = list(dom='t',ordering=F, pageLength=nrow(loaded_data()$recipes)), selection = 'none')},
                                           error=function(cond){return(datatable(data.frame(Output="No data loaded"), rownames=FALSE, options = list(dom='t',ordering=F), selection = 'none'))})})
   
@@ -164,4 +165,11 @@ shinyServer(function(input, output) {
   output$totals_output <- renderDT({tryCatch({datatable(totals_table(), rownames=FALSE, editable=FALSE, options = list(dom='t',ordering=F, pageLength=1), selection = 'none')},
                                              error=function(cond){return(datatable(data.frame(Totals="No data loaded"), rownames=FALSE, options = list(dom='t',ordering=F), selection = 'none'))})})
   
+  # create downloabable excel and handle downloads
+  data_list <- reactive({list(shoppinglist = totals_table(), recipes_and_quantities = qty_output_table())})
+  
+  output$download_planned_cookies <- downloadHandler(
+    filename = function() {"PlannedCookies.xlsx"},
+    content = function(file) {write_xlsx(data_list(), path = file)}
+  )
 })
