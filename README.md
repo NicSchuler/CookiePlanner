@@ -1,6 +1,6 @@
 # CookiePlanner
 
-This App is deployed under [nschuler.shinyapps.io/CookiePlanner_V0_2/](https://nschuler.shinyapps.io/CookiePlanner_V0_2/).
+This App is deployed under [nschuler.shinyapps.io/CookiePlanner_V0_3/](https://nschuler.shinyapps.io/CookiePlanner_V0_3/).
 
 ## What it is for
 Having cookies at christmas is beautiful. However, avoiding foodwaste due to unused ingredients left over while baking can be difficult if you plan to bake multiple recipes. Especially for eggs, where some recipes require more egg whites and others more egg yolks, there is a substantial risk of creating left overs.
